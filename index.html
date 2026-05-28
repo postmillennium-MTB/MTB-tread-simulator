@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MTB Tire Dynamics — Pacejka & FastBike Model</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #0b0d12;
+  --surf1:     #111318;
+  --surf2:     #181c25;
+  --surf3:     #1f2435;
+  --border:    #252c3f;
+  --border2:   #303a55;
+  --accent:    #f57c14;
+  --accentDim: rgba(245,124,20,.18);
+  --accentGlow:rgba(245,124,20,.35);
+  --cyan:      #12c4e8;
+  --cyanDim:   rgba(18,196,232,.15);
+  --green:     #4ef08a;
+  --greenDim:  rgba(78,240,138,.12);
+  --red:       #f04e6c;
+  --txt:       #dde2ef;
+  --txt2:      #7b87a0;
+  --txt3:      #3d4a62;
+  --mono:      'IBM Plex Mono', monospace;
+  --body:      'Barlow Condensed', sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{
+  background:var(--bg);
+  color:var(--txt);
+  font-family:var(--body);
+  font-size:14px;
+  display:flex;
+  flex-direction:column;
+}
+
+/* ─── HEADER ──────────────────────────────────────── */
+.hdr{
+  display:flex;align-items:center;gap:14px;
+  padding:10px 20px;
+  background:var(--surf1);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.hdr-wheel{
+  width:40px;height:40px;flex-shrink:0;
+  animation: spin 14s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.hdr-titles{flex:1;}
+.hdr-main{font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--txt);}
+.hdr-sub{font-family:var(--mono);font-size:10px;color:var(--txt2);margin-top:1px;}
+.hdr-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  border:1px solid var(--border2);
+  color:var(--accent);background:var(--accentDim);
+  padding:4px 10px;border-radius:2px;
+}
+.hdr-model{
+  font-family:var(--mono);font-size:10px;color:var(--txt2);
+  padding:4px 12px;background:var(--surf2);border:1px solid var(--border);border-radius:2px;
+}
+
+/* ─── BODY LAYOUT ─────────────────────────────────── */
+.layout{
+  display:grid;
+  grid-template-columns:265px 1fr;
+  flex:1;min-height:0;
+}
+
+/* ─── SIDEBAR ─────────────────────────────────────── */
+.sidebar{
+  background:var(--surf1);
+  border-right:1px solid var(--border);
+  padding:16px 14px;
+  overflow-y:auto;
+  display:flex;flex-direction:column;gap:18px;
+}
+.sidebar::-webkit-scrollbar{width:4px;}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+.sec-hdr{
+  font-family:var(--mono);font-size:9px;letter-spacing:.14em;
+  color:var(--accent);text-transform:uppercase;
+  border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:2px;
+}
+
+/* tire size buttons */
+.sz-row{display:flex;gap:5px;}
+.sz-btn{
+  flex:1;padding:7px 0;border-radius:3px;cursor:pointer;
+  font-family:var(--mono);font-size:12px;font-weight:700;
+  background:var(--surf2);border:1px solid var(--border);
+  color:var(--txt2);transition:all .15s;
+}
+.sz-btn:hover{border-color:var(--border2);color:var(--txt);}
+.sz-btn.act{background:var(--accentDim);border-color:var(--accent);color:var(--accent);}
+
+/* sliders */
+.ctrl{display:flex;flex-direction:column;gap:5px;}
+.ctrl-lbl{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--txt2);
+}
+.ctrl-val{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--txt);}
+.slider-track{position:relative;height:4px;background:var(--surf3);border-radius:2px;}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;
+  width:100%;height:4px;background:transparent;
+  position:relative;z-index:1;cursor:pointer;outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:15px;height:15px;
+  border-radius:50%;background:var(--accent);
+  box-shadow:0 0 8px var(--accentGlow);cursor:pointer;
+}
+input[type=range]::-moz-range-thumb{
+  width:15px;height:15px;border-radius:50%;
+  background:var(--accent);border:none;cursor:pointer;
+}
+.slider-ends{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--txt3);}
+
+/* toggle */
+.tog-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:7px 10px;background:var(--surf2);border:1px solid var(--border);border-radius:3px;cursor:pointer;
+}
+.tog-lbl{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--txt2);}
+.tog{width:34px;height:17px;background:var(--border2);border-radius:9px;position:relative;transition:background .2s;}
+.tog.on{background:var(--accent);}
+.tog-dot{
+  position:absolute;top:2px;left:2px;
+  width:13px;height:13px;border-radius:50%;background:#fff;transition:transform .2s;
+}
+.tog.on .tog-dot{transform:translateX(17px);}
+
+/* coefficient panel */
+.coeff-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;
+}
+.coeff-box{
+  background:var(--surf2);border:1px solid var(--border);border-radius:3px;
+  padding:7px 9px;display:flex;flex-direction:column;gap:2px;
+}
+.coeff-name{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.06em;text-transform:uppercase;}
+.coeff-v{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--cyan);}
+
+/* stats */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.stat{
+  background:var(--surf2);border:1px solid var(--border);border-radius:3px;
+  padding:6px 8px;display:flex;flex-direction:column;gap:1px;
+}
+.stat-lbl{font-family:var(--mono);font-size:9px;color:var(--txt3);letter-spacing:.06em;text-transform:uppercase;}
+.stat-v{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green);}
+
+/* formula box */
+.formula-box{
+  background:var(--surf2);border:1px solid var(--border);border-radius:3px;
+  padding:9px 10px;font-family:var(--mono);font-size:10px;color:var(--txt2);
+  line-height:1.6;
+}
+.formula-box .f-title{color:var(--accent);font-size:9px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;}
+.formula-box .f-eq{color:var(--txt);font-size:10px;}
+.formula-box .f-note{color:var(--txt3);font-size:9px;margin-top:4px;}
+
+/* ─── MAIN GRID ───────────────────────────────────── */
+.main{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  grid-template-rows:1fr 1fr;
+  gap:1px;background:var(--border);
+  overflow:hidden;
+}
+.panel{
+  background:var(--surf1);
+  padding:14px 16px;
+  display:flex;flex-direction:column;gap:8px;
+  overflow:hidden;
+}
+.panel-hdr{display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0;}
+.panel-title{font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--txt);}
+.panel-sub{font-family:var(--mono);font-size:9px;color:var(--txt2);margin-top:2px;}
+.panel-fig{
+  font-family:var(--mono);font-size:9px;color:var(--txt3);
+  border:1px solid var(--border);padding:2px 6px;border-radius:2px;
+}
+.chart-wrap{position:relative;flex:1;min-height:0;}
+canvas.chart{width:100%!important;height:100%!important;}
+
+/* footprint */
+.fp-wrap{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;}
+#fpCanvas{display:block;}
+</style>
+</head>
+<body>
+
+<!-- ─── HEADER ─────────────────────────────────────── -->
+<header class="hdr">
+  <svg class="hdr-wheel" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="20" r="18" stroke="#f57c14" stroke-width="1.5"/>
+    <circle cx="20" cy="20" r="12" stroke="#f57c14" stroke-width="1" opacity=".4"/>
+    <circle cx="20" cy="20" r="3" fill="#f57c14"/>
+    <!-- spokes -->
+    <line x1="20" y1="2" x2="20" y2="8" stroke="#f57c14" stroke-width="1.5"/>
+    <line x1="20" y1="32" x2="20" y2="38" stroke="#f57c14" stroke-width="1.5"/>
+    <line x1="2" y1="20" x2="8" y2="20" stroke="#f57c14" stroke-width="1.5"/>
+    <line x1="32" y1="20" x2="38" y2="20" stroke="#f57c14" stroke-width="1.5"/>
+    <line x1="6.7" y1="6.7" x2="10.9" y2="10.9" stroke="#f57c14" stroke-width="1.2"/>
+    <line x1="29.1" y1="29.1" x2="33.3" y2="33.3" stroke="#f57c14" stroke-width="1.2"/>
+    <line x1="33.3" y1="6.7" x2="29.1" y2="10.9" stroke="#f57c14" stroke-width="1.2"/>
+    <line x1="10.9" y1="29.1" x2="6.7" y2="33.3" stroke="#f57c14" stroke-width="1.2"/>
+    <!-- knob dots -->
+    <rect x="16" y="1" width="8" height="3" rx="1" fill="#f57c14" opacity=".7"/>
+    <rect x="16" y="36" width="8" height="3" rx="1" fill="#f57c14" opacity=".7"/>
+    <rect x="1" y="17" width="3" height="6" rx="1" fill="#f57c14" opacity=".7"/>
+    <rect x="36" y="17" width="3" height="6" rx="1" fill="#f57c14" opacity=".7"/>
+  </svg>
+  <div class="hdr-titles">
+    <div class="hdr-main">MTB Tire Dynamics Simulator</div>
+    <div class="hdr-sub">Pacejka Magic Tire Formula · FastBike Twisting Torque Polynomial</div>
+  </div>
+  <div class="hdr-model">Tire Model v2.4</div>
+  <div class="hdr-tag">RESEARCH INTERACTIVE</div>
+</header>
+
+<!-- ─── BODY LAYOUT ────────────────────────────────── -->
+<div class="layout">
+
+  <!-- ─── SIDEBAR ──────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <div>
+      <div class="sec-hdr">Tire Configuration</div>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:12px;">
+
+        <div class="ctrl">
+          <div class="ctrl-lbl"><span>Wheel Diameter</span></div>
+          <div class="sz-row">
+            <button class="sz-btn" onclick="setSz('26',this)">26"</button>
+            <button class="sz-btn" onclick="setSz('27.5',this)">27.5"</button>
+            <button class="sz-btn act" onclick="setSz('29',this)">29"</button>
+          </div>
+        </div>
+
+        <div class="ctrl">
+          <div class="ctrl-lbl"><span>Tire Width</span><span class="ctrl-val" id="vWidth">2.35"</span></div>
+          <input type="range" id="sWidth" min="1.9" max="2.6" step="0.05" value="2.35" oninput="onWidth(this)">
+          <div class="slider-ends"><span>1.9"</span><span>2.6"</span></div>
+        </div>
+
+        <div class="tog-row" onclick="toggleKnobs()">
+          <span class="tog-lbl">Tread Knobs</span>
+          <div class="tog on" id="togKnob"><div class="tog-dot"></div></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-hdr">Loading Conditions</div>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:12px;">
+
+        <div class="ctrl">
+          <div class="ctrl-lbl"><span>Inflation Pressure</span><span class="ctrl-val" id="vPres">30 psi</span></div>
+          <input type="range" id="sPres" min="15" max="50" step="1" value="30" oninput="onPres(this)">
+          <div class="slider-ends"><span>15 psi</span><span>50 psi</span></div>
+        </div>
+
+        <div class="ctrl">
+          <div class="ctrl-lbl"><span>Normal Load F<sub>z</sub></span><span class="ctrl-val" id="vLoad">500 N</span></div>
+          <input type="range" id="sLoad" min="200" max="1000" step="10" value="500" oninput="onLoad(this)">
+          <div class="slider-ends"><span>200 N</span><span>1000 N</span></div>
+        </div>
+
+        <div class="ctrl">
+          <div class="ctrl-lbl"><span>Camber Angle γ</span><span class="ctrl-val" id="vCamb">0°</span></div>
+          <input type="range" id="sCamb" min="-25" max="25" step="1" value="0" oninput="onCamb(this)">
+          <div class="slider-ends"><span>−25°</span><span>+25°</span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-hdr">Pacejka B·C·D·E Coefficients</div>
+      <div class="coeff-grid" style="margin-top:8px;">
+        <div class="coeff-box"><div class="coeff-name">B — Stiffness</div><div class="coeff-v" id="cB">—</div></div>
+        <div class="coeff-box"><div class="coeff-name">C — Shape</div><div class="coeff-v" id="cC">—</div></div>
+        <div class="coeff-box"><div class="coeff-name">D — Peak (N)</div><div class="coeff-v" id="cD">—</div></div>
+        <div class="coeff-box"><div class="coeff-name">E — Curvature</div><div class="coeff-v" id="cE">—</div></div>
+        <div class="coeff-box"><div class="coeff-name">BCD (N/rad)</div><div class="coeff-v" id="cBCD">—</div></div>
+        <div class="coeff-box"><div class="coeff-name">α<sub>peak</sub></div><div class="coeff-v" id="cAPeak">—</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-hdr">FastBike Poly Coefficients</div>
+      <div class="coeff-grid" style="margin-top:8px;">
+        <div class="coeff-box"><div class="coeff-name">c₀ (offset)</div><div class="coeff-v" id="fc0" style="color:var(--green)">—</div></div>
+        <div class="coeff-box"><div class="coeff-name">c₁ (linear)</div><div class="coeff-v" id="fc1" style="color:var(--green)">—</div></div>
+        <div class="coeff-box"><div class="coeff-name">t₀ (trail m)</div><div class="coeff-v" id="ft0" style="color:var(--green)">—</div></div>
+        <div class="coeff-box"><div class="coeff-name">B<sub>t</sub></div><div class="coeff-v" id="fBt" style="color:var(--green)">—</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-hdr">Derived Outputs</div>
+      <div class="stats-grid" style="margin-top:8px;">
+        <div class="stat"><div class="stat-lbl">Contact Area</div><div class="stat-v" id="sArea">—</div></div>
+        <div class="stat"><div class="stat-lbl">Patch L × W</div><div class="stat-v" id="sPatch">—</div></div>
+        <div class="stat"><div class="stat-lbl">Peak F<sub>y</sub></div><div class="stat-v" id="sFy">—</div></div>
+        <div class="stat"><div class="stat-lbl">Peak |M<sub>z</sub>|</div><div class="stat-v" id="sMz">—</div></div>
+        <div class="stat"><div class="stat-lbl">μ<sub>y</sub> coeff.</div><div class="stat-v" id="sMu">—</div></div>
+        <div class="stat"><div class="stat-lbl">CS (N/°)</div><div class="stat-v" id="sCS">—</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-hdr">Model Equations</div>
+      <div class="formula-box" style="margin-top:6px;">
+        <div class="f-title">Pacejka Lateral Force</div>
+        <div class="f-eq">Fy = D·sin(C·atan(B·α − E·(B·α − atan(B·α))))</div>
+        <div class="f-note">Magic Motorcycle Tire Model</div>
+      </div>
+      <div class="formula-box" style="margin-top:6px;">
+        <div class="f-title">FastBike M<sub>z</sub> (Twisting Torque)</div>
+        <div class="f-eq">Mz = −t(α)·Fy + c₀+c₁α+c₂α²</div>
+        <div class="f-eq">t(α) = t₀·cos(C<sub>t</sub>·atan(B<sub>t</sub>·α))</div>
+        <div class="f-note">Pneumatic trail + polynomial residual</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ─── CHART GRID ────────────────────────────────── -->
+  <div class="main">
+
+    <!-- Panel 1: Fy vs slip angle -->
+    <div class="panel">
+      <div class="panel-hdr">
+        <div>
+          <div class="panel-title">Lateral Force F<sub>y</sub> vs Slip Angle α</div>
+          <div class="panel-sub">Pacejka Magic Formula — knobbed vs smooth reference</div>
+        </div>
+        <div class="panel-fig">FIG. 6</div>
+      </div>
+      <div class="chart-wrap"><canvas id="cFy" class="chart"></canvas></div>
+    </div>
+
+    <!-- Panel 2: Mz vs slip angle -->
+    <div class="panel">
+      <div class="panel-hdr">
+        <div>
+          <div class="panel-title">Self-Aligning Moment M<sub>z</sub> vs Slip Angle α</div>
+          <div class="panel-sub">FastBike polynomial + pneumatic trail model</div>
+        </div>
+        <div class="panel-fig">FIG. 6</div>
+      </div>
+      <div class="chart-wrap"><canvas id="cMz" class="chart"></canvas></div>
+    </div>
+
+    <!-- Panel 3: Contact footprint -->
+    <div class="panel">
+      <div class="panel-hdr">
+        <div>
+          <div class="panel-title">Contact Patch Footprint</div>
+          <div class="panel-sub">Pressure & load dependent shape with tread pattern</div>
+        </div>
+        <div class="panel-fig">FIG. 5</div>
+      </div>
+      <div class="fp-wrap"><canvas id="fpCanvas"></canvas></div>
+    </div>
+
+    <!-- Panel 4: Pressure sensitivity -->
+    <div class="panel">
+      <div class="panel-hdr">
+        <div>
+          <div class="panel-title">Pressure Sensitivity — F<sub>y</sub> Envelope</div>
+          <div class="panel-sub">Fy at p = 20 · 25 · 30 · 35 · 40 psi — current highlighted</div>
+        </div>
+        <div class="panel-fig">FIG. 3</div>
+      </div>
+      <div class="chart-wrap"><canvas id="cPs" class="chart"></canvas></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════ */
+const S = {
+  sz: '29',
+  w: 2.35,
+  p: 30,
+  fz: 500,
+  gamma: 0,
+  knobs: true,
+};
+
+/* ══════════════════════════════════════════════
+   TIRE MODEL
+══════════════════════════════════════════════ */
+const SF = {'26':0.94, '27.5':1.0, '29':1.06};
+
+function pacejkaFy(a_deg, fz, p_psi, sz, w, knobs, gamma_deg=0) {
+  const a   = a_deg * Math.PI / 180;
+  const g   = gamma_deg * Math.PI / 180;
+  const sf  = SF[sz] * (w / 2.35);
+  const pn  = p_psi / 30;          // pressure normalised to 30 psi
+  const kk  = knobs ? 0.82 : 1.0;
+  const kn  = fz / 1000;           // kN
+
+  // Peak friction
+  const mu  = 0.94 * sf * kk * (1 - 0.028 * (pn - 1));
+  const D   = mu * fz;
+  // Shape factor
+  const C   = 1.44 + 0.03 * sf - 0.008 * (pn - 1);
+  // Cornering stiffness
+  const BCD = (2.9 + 0.72 * kn) * sf * (1 + 0.19 * (pn - 1)) * 1000;
+  const B   = BCD / (C * D);
+  // Curvature factor
+  const E   = -1.22 - 0.38 * (pn - 1);
+  // Camber‐induced horizontal shift (pneumatic camber thrust)
+  const SHy = 0.045 * g;
+
+  const x   = a + SHy;
+  const Fy  = D * Math.sin(C * Math.atan(B * x - E * (B * x - Math.atan(B * x))));
+  return { Fy, D, C, B, E, BCD, mu };
+}
+
+function fastbikeMz(a_deg, fz, p_psi, sz, w, knobs) {
+  const sf  = SF[sz] * (w / 2.35);
+  const pn  = p_psi / 30;
+  const kk  = knobs ? 0.87 : 1.0;
+  const kn  = fz / 1000;
+  const a_r = a_deg * Math.PI / 180;
+
+  const { Fy } = pacejkaFy(a_deg, fz, p_psi, sz, w, knobs, 0);
+
+  // Pneumatic trail at zero slip
+  const t0 = 0.038 * sf * kk * (1 - 0.07 * (pn - 1));
+  const Bt = 3.6 + 0.4 * (pn - 1);
+  const Ct = 1.5;
+  const t  = t0 * Math.cos(Ct * Math.atan(Bt * a_r));
+
+  // FastBike residual polynomial
+  const c0 =  0;
+  const c1 = -0.0025 * sf * kn * kk;
+  const c2 =  0.00009 * sf * kn;
+  const Mz_res = c0 + c1 * a_deg + c2 * a_deg ** 2;
+
+  const Mz = -t * Fy + Mz_res;
+  return { Mz, t0, Bt, c0, c1 };
+}
+
+function contactPatch(fz, p_psi, sz, w, knobs) {
+  const sf     = SF[sz];
+  const pPa    = p_psi * 6894.76;
+  const kk     = knobs ? 0.68 : 1.0;  // knob coverage factor
+  const A      = fz / pPa;             // m², pneumatic theory
+  const aspect = 1.35 + 0.08 * sf;
+  const tireW  = w * 0.0254;
+  const maxW   = tireW * 0.90;
+  const pw     = Math.min(maxW, Math.sqrt(A / aspect));
+  const pl     = A / pw;
+  return {
+    length: pl * 1000,          // mm
+    width:  pw * 1000,          // mm
+    area:   A * 1e4 * kk,       // cm²
+  };
+}
+
+function corneringStiffness(p_psi, fz, sz, w, knobs) {
+  return pacejkaFy(0.001, fz, p_psi, sz, w, knobs, 0).BCD;
+}
+
+/* peak search */
+function peakFy(fz, p_psi, sz, w, knobs, gamma) {
+  let best = 0, bestA = 0;
+  for (let a = 0; a <= 20; a += 0.2) {
+    const v = pacejkaFy(a, fz, p_psi, sz, w, knobs, gamma).Fy;
+    if (v > best) { best = v; bestA = a; }
+  }
+  return { peakFy: best, peakA: bestA };
+}
+
+/* ══════════════════════════════════════════════
+   CHARTS INIT
+══════════════════════════════════════════════ */
+let chFy, chMz, chPs;
+
+const ALPHA_RANGE = [];
+for (let a = -20; a <= 20; a += 0.4) ALPHA_RANGE.push(a);
+
+const PRESS_COLORS = ['#5baaf0','#12c4e8','#f57c14','#4ef08a','#f04e6c'];
+const PRESS_VALS   = [20, 25, 30, 35, 40];
+
+Chart.defaults.color            = '#7b87a0';
+Chart.defaults.borderColor      = '#252c3f';
+Chart.defaults.font.family      = "'IBM Plex Mono'";
+Chart.defaults.font.size        = 10;
+
+function axisOpt(title) {
+  return {
+    grid:   { color:'rgba(37,44,63,.7)' },
+    ticks:  { color:'#7b87a0', maxTicksLimit:7 },
+    title:  { display:true, text:title, color:'#7b87a0', font:{family:"'IBM Plex Mono'",size:9} },
+    border: { color:'#252c3f' },
+  };
+}
+
+function mkChart(id, datasets, xTitle, yTitle) {
+  const ctx = document.getElementById(id).getContext('2d');
+  return new Chart(ctx, {
+    type:'line',
+    data:{ datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{ duration:250 },
+      plugins:{ legend:{ labels:{ font:{size:9}, color:'#7b87a0', boxWidth:12, padding:8 }}},
+      scales:{
+        x:{ ...axisOpt(xTitle), type:'linear' },
+        y:{ ...axisOpt(yTitle) },
+      },
+    },
+  });
+}
+
+function initCharts() {
+  chFy = mkChart('cFy',
+    [
+      { label:'Fy — current',      data:[], borderColor:'#f57c14', borderWidth:2.5, pointRadius:0, tension:.4 },
+      { label:'Fy — slick ref',    data:[], borderColor:'rgba(18,196,232,.5)', borderWidth:1.5, borderDash:[5,4], pointRadius:0, tension:.4 },
+    ],
+    'Slip Angle α (°)', 'Lateral Force Fy (N)'
+  );
+
+  chMz = mkChart('cMz',
+    [
+      { label:'Mz — current',   data:[], borderColor:'#4ef08a', borderWidth:2.5, pointRadius:0, tension:.4 },
+      { label:'Mz — slick ref', data:[], borderColor:'rgba(78,240,138,.4)', borderWidth:1.5, borderDash:[5,4], pointRadius:0, tension:.4 },
+    ],
+    'Slip Angle α (°)', 'Self-Aligning Moment Mz (N·m)'
+  );
+
+  chPs = mkChart('cPs',
+    PRESS_VALS.map((pp, i) => ({
+      label: pp + ' psi',
+      data: [],
+      borderColor: PRESS_COLORS[i],
+      borderWidth: pp === 30 ? 2.5 : 1.5,
+      pointRadius: 0,
+      tension: .4,
+    })),
+    'Slip Angle α (°)', 'Lateral Force Fy (N)'
+  );
+}
+
+/* ══════════════════════════════════════════════
+   UPDATE
+══════════════════════════════════════════════ */
+function update() {
+  const { sz, w, p, fz, gamma, knobs } = S;
+
+  /* ─ Fy chart ─ */
+  chFy.data.datasets[0].data = ALPHA_RANGE.map(a => ({
+    x: a, y: pacejkaFy(a, fz, p, sz, w, knobs, gamma).Fy
+  }));
+  chFy.data.datasets[1].data = ALPHA_RANGE.map(a => ({
+    x: a, y: pacejkaFy(a, fz, p, sz, w, false, gamma).Fy
+  }));
+  chFy.data.datasets[0].label = knobs ? 'Fy — knobbed' : 'Fy — smooth';
+  chFy.update();
+
+  /* ─ Mz chart ─ */
+  chMz.data.datasets[0].data = ALPHA_RANGE.map(a => ({
+    x: a, y: fastbikeMz(a, fz, p, sz, w, knobs).Mz
+  }));
+  chMz.data.datasets[1].data = ALPHA_RANGE.map(a => ({
+    x: a, y: fastbikeMz(a, fz, p, sz, w, false).Mz
+  }));
+  chMz.data.datasets[0].label = knobs ? 'Mz — knobbed' : 'Mz — smooth';
+  chMz.update();
+
+  /* ─ Pressure sensitivity chart ─ */
+  PRESS_VALS.forEach((pp, i) => {
+    chPs.data.datasets[i].data = ALPHA_RANGE.map(a => ({
+      x: a, y: pacejkaFy(a, fz, pp, sz, w, knobs, gamma).Fy
+    }));
+    chPs.data.datasets[i].borderWidth = (pp === p) ? 3 : 1.2;
+    chPs.data.datasets[i].borderColor = (pp === p)
+      ? '#f57c14'
+      : PRESS_COLORS[i];
+  });
+  chPs.update();
+
+  /* ─ Coefficients ─ */
+  const r = pacejkaFy(0.001, fz, p, sz, w, knobs, gamma);
+  const mr = fastbikeMz(0.001, fz, p, sz, w, knobs);
+  document.getElementById('cB').textContent    = r.B.toFixed(3);
+  document.getElementById('cC').textContent    = r.C.toFixed(3);
+  document.getElementById('cD').textContent    = Math.round(r.D);
+  document.getElementById('cE').textContent    = r.E.toFixed(3);
+  document.getElementById('cBCD').textContent  = Math.round(r.BCD);
+  document.getElementById('fc0').textContent   = mr.c0.toFixed(4);
+  document.getElementById('fc1').textContent   = mr.c1.toFixed(4);
+  document.getElementById('ft0').textContent   = mr.t0.toFixed(4);
+  document.getElementById('fBt').textContent   = mr.Bt.toFixed(2);
+
+  const { peakFy: pFy, peakA } = peakFy(fz, p, sz, w, knobs, gamma);
+  document.getElementById('cAPeak').textContent = peakA.toFixed(1) + '°';
+
+  const peakMz = Math.abs(fastbikeMz(peakA * 0.55, fz, p, sz, w, knobs).Mz);
+
+  /* ─ Stats ─ */
+  const patch = contactPatch(fz, p, sz, w, knobs);
+  const csNdeg = r.BCD * Math.PI / 180;
+  document.getElementById('sArea').textContent  = patch.area.toFixed(1) + ' cm²';
+  document.getElementById('sPatch').textContent = patch.length.toFixed(0) + '×' + patch.width.toFixed(0) + ' mm';
+  document.getElementById('sFy').textContent    = Math.round(pFy) + ' N';
+  document.getElementById('sMz').textContent    = peakMz.toFixed(2) + ' N·m';
+  document.getElementById('sMu').textContent    = r.mu.toFixed(3);
+  document.getElementById('sCS').textContent    = csNdeg.toFixed(1);
+
+  /* ─ Footprint ─ */
+  drawFootprint(patch);
+}
+
+/* ══════════════════════════════════════════════
+   FOOTPRINT CANVAS
+══════════════════════════════════════════════ */
+function rrect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y,     x + w, y + r,     r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x,     y + h, x,     y + h - r, r);
+  ctx.lineTo(x,     y + r);
+  ctx.arcTo(x,     y,     x + r, y,         r);
+  ctx.closePath();
+}
+
+function drawFootprint(patch) {
+  const cv = document.getElementById('fpCanvas');
+  const container = cv.parentElement;
+  const cW = container.clientWidth  - 20;
+  const cH = container.clientHeight - 10;
+  cv.width  = cW;
+  cv.height = cH;
+  const ctx = cv.getContext('2d');
+
+  ctx.clearRect(0, 0, cW, cH);
+  ctx.fillStyle = '#0b0d12';
+  ctx.fillRect(0, 0, cW, cH);
+
+  /* grid */
+  ctx.strokeStyle = 'rgba(37,44,63,.55)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < cW; x += 20) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cH); ctx.stroke();
+  }
+  for (let y = 0; y < cH; y += 20) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cW, y); ctx.stroke();
+  }
+
+  /* scale so patch fits nicely */
+  const scale = Math.min((cW * 0.58) / patch.length, (cH * 0.72) / patch.width);
+  const pxL = patch.length * scale;  // pixels for length (vertical on screen)
+  const pxW = patch.width  * scale;  // pixels for width  (horizontal)
+
+  const camberShift = S.gamma * 1.8;
+  const cx = cW / 2 + camberShift;
+  const cy = cH / 2;
+
+  /* crosshair */
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(37,44,63,.9)';
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, cH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cW, cy); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const x0 = cx - pxW / 2;
+  const y0 = cy - pxL / 2;
+  const cr = Math.min(pxW, pxL) * 0.22;
+
+  /* shadow */
+  ctx.shadowColor = 'rgba(245,124,20,.25)';
+  ctx.shadowBlur  = 22;
+
+  /* fill */
+  ctx.fillStyle = '#1a1f2e';
+  rrect(ctx, x0, y0, pxW, pxL, cr);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  /* border */
+  ctx.strokeStyle = 'rgba(245,124,20,.85)';
+  ctx.lineWidth   = 2;
+  rrect(ctx, x0, y0, pxW, pxL, cr);
+  ctx.stroke();
+
+  /* tread */
+  if (S.knobs) {
+    drawKnobs(ctx, cx, cy, pxW, pxL, cr);
+  } else {
+    /* slick grooves */
+    ctx.strokeStyle = 'rgba(18,196,232,.4)';
+    ctx.lineWidth   = Math.max(1, pxW * 0.04);
+    const g1 = cx - pxW * 0.28;
+    const g2 = cx + pxW * 0.28;
+    ctx.beginPath(); ctx.moveTo(g1, y0+4); ctx.lineTo(g1, y0+pxL-4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(g2, y0+4); ctx.lineTo(g2, y0+pxL-4); ctx.stroke();
+    ctx.lineWidth = Math.max(1, pxW * 0.02);
+    for (let yi = y0 + pxL*0.2; yi < y0+pxL*0.85; yi += pxL*0.12) {
+      ctx.beginPath(); ctx.moveTo(x0+4,yi); ctx.lineTo(x0+pxW-4,yi); ctx.stroke();
+    }
+  }
+
+  /* annotations */
+  ctx.font = '9px IBM Plex Mono';
+  ctx.fillStyle = 'rgba(18,196,232,.9)';
+  ctx.textAlign = 'center';
+
+  /* width arrow */
+  const arrowY = y0 + pxL + 14;
+  ctx.beginPath(); ctx.moveTo(x0, arrowY); ctx.lineTo(x0+pxW, arrowY); ctx.strokeStyle='rgba(18,196,232,.6)'; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillText(patch.width.toFixed(0) + ' mm', cx, arrowY + 11);
+
+  /* length arrow */
+  const arrowX = x0 + pxW + 14;
+  ctx.beginPath(); ctx.moveTo(arrowX, y0); ctx.lineTo(arrowX, y0+pxL); ctx.stroke();
+  ctx.save();
+  ctx.translate(arrowX + 11, cy);
+  ctx.rotate(Math.PI / 2);
+  ctx.fillText(patch.length.toFixed(0) + ' mm', 0, 0);
+  ctx.restore();
+
+  /* area label */
+  ctx.fillStyle = 'rgba(245,124,20,.75)';
+  ctx.font = '10px IBM Plex Mono';
+  ctx.textAlign = 'center';
+  ctx.fillText(patch.area.toFixed(1) + ' cm²', cx, cy + 4);
+}
+
+function drawKnobs(ctx, cx, cy, pxW, pxL, cr) {
+  const kw = Math.max(4, pxW * 0.14);
+  const kh = Math.max(5, pxL * 0.11);
+  const cols = 3;
+  const rows = 5;
+  const gapX = (pxW * 0.82 - kw * cols) / (cols - 1);
+  const gapY = (pxL * 0.82 - kh * rows) / (rows - 1);
+  const ox = cx - (kw * cols + gapX * (cols - 1)) / 2;
+  const oy = cy - (kh * rows + gapY * (rows - 1)) / 2;
+
+  ctx.fillStyle   = 'rgba(245,124,20,.75)';
+  ctx.strokeStyle = 'rgba(245,124,20,.95)';
+  ctx.lineWidth   = 0.6;
+
+  for (let r = 0; r < rows; r++) {
+    const yo = oy + r * (kh + gapY);
+    const offsetX = (r % 2) ? gapX * 0.3 : 0;
+    for (let c = 0; c < cols; c++) {
+      const xo = ox + c * (kw + gapX) + offsetX;
+      const nx = (xo + kw / 2 - cx) / (pxW / 2);
+      const ny = (yo + kh / 2 - cy) / (pxL / 2);
+      if (Math.abs(nx) > 0.87 || Math.abs(ny) > 0.87) continue;
+      rrect(ctx, xo, yo, kw, kh, 1.5);
+      ctx.fill(); ctx.stroke();
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════
+   EVENT HANDLERS
+══════════════════════════════════════════════ */
+function setSz(v, el) {
+  S.sz = v;
+  document.querySelectorAll('.sz-btn').forEach(b => b.classList.remove('act'));
+  el.classList.add('act');
+  update();
+}
+function onWidth(el)  { S.w = +el.value; document.getElementById('vWidth').textContent = (+el.value).toFixed(2)+'"'; update(); }
+function onPres(el)   { S.p = +el.value; document.getElementById('vPres').textContent  = el.value+' psi'; update(); }
+function onLoad(el)   { S.fz= +el.value; document.getElementById('vLoad').textContent  = el.value+' N';   update(); }
+function onCamb(el)   {
+  S.gamma = +el.value;
+  document.getElementById('vCamb').textContent = (S.gamma>=0?'+':'')+S.gamma+'°';
+  update();
+}
+function toggleKnobs() {
+  S.knobs = !S.knobs;
+  const t = document.getElementById('togKnob');
+  t.classList.toggle('on', S.knobs);
+  update();
+}
+
+/* ══════════════════════════════════════════════
+   BOOT
+══════════════════════════════════════════════ */
+window.addEventListener('load', () => {
+  initCharts();
+  update();
+});
+
+/* redraw footprint on resize */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const patch = contactPatch(S.fz, S.p, S.sz, S.w, S.knobs);
+    drawFootprint(patch);
+  }, 120);
+});
+</script>
+</body>
+</html>
